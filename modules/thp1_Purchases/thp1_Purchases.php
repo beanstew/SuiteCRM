@@ -82,4 +82,59 @@ class thp1_Purchases extends Basic
         return false;
     }
 	
+	/*
+	*  Purchases Module
+	   On save custom logic hook 
+	*  Save purchase price at the alternative currencies using exchange rate 
+	*  on day of purchase 	
+	*/
+	function save($check_notify = FALSE)
+	{
+		// today
+		$date_now = date("Y-m-d"); 
+			
+		// Purchase date - formatted e.g. 2013-12-24
+		$datePurchased = new DateTime($this->datepurchased);
+		$datePurchasedYmd = $datePurchased->format('Y-m-d');
+		
+		// Default to today if the Purchase date is in the future
+		if ($datePurchasedYmd > $date_now) 
+		{
+			$datePurchasedYmd = $date_now;
+		}
+
+		// Get historical exchange rates for given date and base currency GBP, 
+		//  access key is supplied by Exchange Rates API https://exchangeratesapi.io/documentation/
+		$exchangeRates = $this->getExchangeRates($datePurchasedYmd, 'GBP', '654acc157a624bf1799d89cb75afddee');
+		
+		//save purchase price in alternative currencies 	
+		$this->priceusd = $this->pricegbp * $exchangeRates['USD'];
+		$this->priceeur = $this->pricegbp * $exchangeRates['EUR'];
+		$this->priceaud = $this->pricegbp * $exchangeRates['AUD'];
+		$this->pricenzd = $this->pricegbp * $exchangeRates['NZD'];
+		
+		parent::save($check_notify);
+	}
+	
+    /*
+	* Return exchanges rates for a given base currency - base currency defaults to GBP
+	* Defaults to latest rate
+	* Supply date in $endpoint to retrieve historic rate for given date
+	*/
+	function getExchangeRates($endpoint = 'latest', $base = 'GBP', $access_key)
+	{
+		// Initialize CURL:
+		$ch = curl_init('http://api.exchangeratesapi.io/v1/'.$endpoint.'?access_key='.$access_key.'&base='.$base.'');
+		curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+
+		// Store the data:
+		$json = curl_exec($ch);
+		curl_close($ch);
+
+		// Decode JSON response:
+		$exchangeRates = json_decode($json, true);
+
+		// Access the exchange rate values, e.g. GBP:
+		return $exchangeRates['rates'];
+	}
 }
